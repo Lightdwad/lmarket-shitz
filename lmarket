@@ -1,0 +1,101 @@
+# --- Alias for web requests
+Set-Alias ixwr Invoke-WebRequest
+
+# --- Branding
+$branding = @"
+██╗     ███╗   ███╗ █████╗ ██████╗ ██╗  ██╗███████╗████████╗
+██║     ████╗ ████║██╔══██╗██╔══██╗██║ ██╔╝██╔════╝╚══██╔══╝
+██║     ██╔████╔██║███████║██████╔╝█████╔╝ █████╗     ██║   
+██║     ██║╚██╔╝██║██╔══██║██╔══██╗██╔═██╗ ██╔══╝     ██║   
+███████╗██║ ╚═╝ ██║██║  ██║██║  ██║██║  ██╗███████╗   ██║   
+╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝   ╚═╝
+"@
+
+# --- Firmware / Secure Boot
+$fw = if($env:firmware_type){$env:firmware_type}elseif(Test-Path "$env:SystemDrive\EFI"){'UEFI'}else{'BIOS/Unknown'}
+$sb = 'Unknown'
+if(Get-Command Confirm-SecureBootUEFI -ErrorAction SilentlyContinue){
+    $sb = if(Confirm-SecureBootUEFI){'Enabled'}else{'Disabled'}
+} else {
+    try {
+        $r = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State' -ErrorAction SilentlyContinue
+        if($r -and $r.UEFISecureBootEnabled -ne $null){
+            $sb = if($r.UEFISecureBootEnabled -eq 1){'Enabled'}else{'Disabled'}
+        } else { $sb = 'Unavailable' }
+    } catch { $sb = 'Unavailable' }
+}
+
+# --- Core Isolation / Memory Integrity
+$coreIso = 'Unavailable'
+$hic = 'Unavailable'
+try {
+    $dg = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard' -ErrorAction SilentlyContinue
+    if($dg.VirtualizationBasedSecurityStatus -eq 1){ $coreIso='Enabled' } else { $coreIso='Disabled' }
+    if(Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity'){
+        $v = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name Enabled -ErrorAction SilentlyContinue).Enabled
+        $hic = if($v -eq 1){'Enabled'}elseif($v -eq 0){'Disabled'}else{'Present/Unknown'}
+    }
+} catch {}
+
+# --- AntiVirus
+$avs = 'Unknown'
+try {
+    $mp = Get-MpComputerStatus -ErrorAction SilentlyContinue
+    if($mp){ $avs = if($mp.AntivirusEnabled){'Enabled'}else{'Disabled'} }
+} catch {}
+
+# --- TPM
+$tpm = 'Unavailable'
+try {
+    $t = Get-WmiObject -Namespace "root\CIMV2\Security\MicrosoftTpm" -Class Win32_Tpm -ErrorAction SilentlyContinue
+    if($t -and $t.IsEnabled().IsEnabled){ $tpm='Enabled' } else { $tpm='Disabled' }
+} catch {}
+
+# --- Firewall
+$fwProfiles=@()
+try {
+    $profiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+    if($profiles){ foreach($p in $profiles){ $fwProfiles += "$($p.Name)=$($p.Enabled)" } }
+} catch {}
+$fwState = if($fwProfiles){ $fwProfiles -join ", " } else {'Unavailable'}
+
+# --- Hyper-V / Virtualization
+$hyperV='Unavailable'
+try {
+    $out = systeminfo | Select-String "Hyper-V Requirements"
+    if($out){ $hyperV = ($out -join "; ") }
+} catch {}
+
+# --- OS Info
+$osVer = [System.Environment]::OSVersion.Version
+$osName = (Get-CimInstance Win32_OperatingSystem).Caption
+
+# --- User / Elevation
+$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$elev = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+# --- Build Discord embed
+$embed = @{
+    embeds = @(@{
+        title = "LMarket System Security Report"
+        color = 5814783
+        description = "```$branding```"
+        fields = @(
+            @{name="Machine";value=$env:COMPUTERNAME;inline=$true}
+            @{name="User";value=$user;inline=$true}
+            @{name="Elevated";value=$elev;inline=$true}
+            @{name="Firmware";value=$fw;inline=$true}
+            @{name="Secure Boot";value=$sb;inline=$true}
+            @{name="Antivirus";value=$avs;inline=$true}
+            @{name="Core Isolation";value=$coreIso;inline=$true}
+            @{name="Memory Integrity";value=$hic;inline=$true}
+            @{name="TPM";value=$tpm;inline=$true}
+            @{name="Firewall";value=$fwState;inline=$false}
+            @{name="Hyper-V / VBS";value=$hyperV;inline=$false}
+            @{name="OS Version";value="$osName $osVer";inline=$false}
+        )
+    })
+}
+
+# --- Send to Discord webhook
+ixwr -Uri 'YOUR_WEBHOOK_HERE' -Method Post -Body ($embed | ConvertTo-Json -Depth 6) -ContentType 'application/json'
