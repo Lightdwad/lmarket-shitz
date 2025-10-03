@@ -81,7 +81,7 @@ $embed = @{
         color = 5814783
         description = "```$branding```"
         thumbnail = @{
-            url = "https://i.imgur.com/0kCorbV.gif"
+            url = "https://i.imgur.com/dwwqCyt.png"
         }
         fields = @(
             @{name="Machine";value=$env:COMPUTERNAME;inline=$true}
